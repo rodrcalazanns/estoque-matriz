@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Matriz Emergente</title>
+
+  <!-- Estilos externos -->
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- XLSX -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- JS principal -->
+  <script src="js/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <h1><span>MATRIZ</span><span>EMERGENTE</span></h1>
+    <ul class="nav">
+      <li><a id="open-stock" href="#">Estoque Geral</a></li>
+      <li><a id="open-form" href="#">Cadastrar Equipamento</a></li>
+      <li><a id="open-techs" href="#">Técnicos & Atribuição</a></li>
+      <li><a id="open-instalados" href="#">Instalados</a></li>
+      <li><a id="open-recolhas" href="#">Recolhas</a></li>
+    </ul>
+  </aside>
+
+<main class="content">
+  <!-- Formulário de cadastro -->
+  <div id="equipment-form" class="view">
+    <h2>Cadastrar Equipamento</h2>
+    <form id="form">
+      <label for="category">Categoria</label>
+      <select id="category" required>
+        <option value="">Selecione...</option>
+      </select>
+      <label for="subcategory">Subcategoria</label>
+      <select id="subcategory" required>
+        <option value="">Selecione...</option>
+      </select>
+      <label for="serial">Número de Série</label>
+      <input type="text" id="serial" placeholder="Digite o número de série" required />
+      <button type="submit">Salvar</button>
+    </form>
+  </div>
+
+  <!-- Visualização de estoque -->
+  <div id="stock-view" class="view">
+    <h2>Estoque de Equipamentos</h2>
+    <button id="reset-app" style="
+      float: right;
+      margin-top: -2.2rem;
+      margin-bottom: 1rem;
+      padding: 0.3rem 0.8rem;
+      font-size: 0.85rem;
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    ">
+      Reset
+    </button>
+    <div id="search-container">
+      <div style="margin-bottom: 1rem;">
+        <label for="xlsx-upload">Importar Arquivo Excel (.xlsx):</label>
+        <input type="file" id="xlsx-upload" accept=".xlsx" />
+        <button id="btn-importar">Importar</button>
+      </div>
+      <input type="text" id="search-input" placeholder="Pesquisar por número de série..." />
+    </div>
+    <div id="stock-content"></div>
+  </div>
+
+  <!-- Cadastro de Técnicos -->
+  <div id="techs-view" class="view">
+    <h2>Cadastro de Técnicos</h2>
+    <div style="display: flex; justify-content: end; gap: 0.5rem; margin-bottom: 1rem;">
+      <select id="export-select">
+        <option value="">Selecione técnico...</option>
+      </select>
+      <button id="btn-exportar">Exportar</button>
+    </div>
+
+    <form id="techs-form">
+      <label for="tech-name">Nome do técnico</label>
+      <input type="text" id="tech-name" placeholder="Digite o nome do técnico" required />
+      <button type="button" id="add-tech">Adicionar</button>
+    </form>
+
+    <h3>Técnicos Cadastrados</h3>
+    <ul id="techs-list"></ul>
+
+    <h3>Atribuir Equipamento</h3>
+    <div id="assign-form">
+      <label for="assign-tech">Técnico</label>
+      <select id="assign-tech">
+        <option value="">Selecione técnico...</option>
+      </select>
+      <label for="assign-serial">Número de Série</label>
+      <input type="text" id="assign-serial" placeholder="Digite o número de série e pressione Enter" />
+    </div>
+    <div id="assignments"></div>
+  </div>
+
+  <!-- Instalados -->
+  <div id="install-form" class="view">
+    <h2>Instalar Equipamento</h2>
+    <form id="install-tech-form">
+      <label for="install-tech">Técnico</label>
+      <select id="install-tech">
+        <option value="">Selecione técnico...</option>
+      </select>
+      <label for="install-serial">Número de Série</label>
+      <input type="text" id="install-serial" placeholder="Digite o número de série e pressione Enter" />
+    </form>
+    <div id="installed-list"></div>
+  </div>
+
+  <!-- Recolhas -->
+  <div id="pickup-form" class="view">
+    <h2>Recolher Equipamento</h2>
+    <form id="pickup-tech-form">
+      <label for="pickup-tech">Técnico</label>
+      <select id="pickup-tech">
+        <option value="">Selecione técnico...</option>
+      </select>
+
+      <label for="pickup-category">Categoria (opcional)</label>
+      <select id="pickup-category">
+        <option value="">-- Não selecionar --</option>
+      </select>
+
+      <label for="pickup-subcategory">Subcategoria (opcional)</label>
+      <select id="pickup-subcategory">
+        <option value="">-- Não selecionar --</option>
+      </select>
+
+      <label for="pickup-serial">Número de Série</label>
+      <input type="text" id="pickup-serial" placeholder="Digite o número de série e pressione Enter" />
+    </form>
+    <div id="pickup-list"></div>
+  </div>
+</main>
+
+</body>
+</html>
