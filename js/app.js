@@ -1,3 +1,37 @@
+  const supabase = supabase.createClient(
+    'https://estoque-matriz.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRua2ltdm51Z3JyY2Z5c2ZxZHJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgyODA0NTksImV4cCI6MjA2Mzg1NjQ1OX0.qxY-EyVtvKSqHTpu1HukZBnwQKo3eNALnDjlDj3g7AI'
+  );
+  async function carregarTecnicosDoSupabase() {
+  const { data, error } = await supabase.from('tecnicos').select('*');
+  if (error) {
+    console.error('Erro ao carregar técnicos:', error.message);
+    return;
+  }
+  techs.length = 0;
+  techs.push(...data.map(t => t.nome));
+}
+
+  // Carrega dados do Supabase ao iniciar
+async function carregarDoSupabase() {
+  const { data, error } = await supabase.from('equipamentos').select('*');
+
+  if (error) {
+    alert('Erro ao carregar dados do Supabase: ' + error.message);
+    return;
+  }
+
+  items.length = 0;
+  items.push(...data);
+
+  renderStock();
+  renderTechInterface();
+  renderInstalledList();
+  renderPickupList();
+}
+
+
+    
     const categories = {
     "Box's": [
       "BOX 2.0 HD (CABO DCR 7151) CABO FA e LA",
@@ -274,7 +308,6 @@
           renderTechInterface();
           renderInstalledList();
           renderPickupList();
-          saveToLocalStorage();
         }
       });
 
@@ -467,26 +500,54 @@ techs.forEach(tech => {
       categorySelect.addEventListener('change', updateSubcategories);
       searchInput.addEventListener('input', () => renderStock(searchInput.value.trim()));
 
-      form.addEventListener('submit', e => {
-        e.preventDefault();
-        const sn = serialInput.value.trim();
-        if (items.some(x => x.numeroSerie === sn)) return alert('Este número de série já está cadastrado no estoque.');
-        items.push({ categoria: categorySelect.value, subcategoria: subcategorySelect.value, numeroSerie: sn, status: 'disponivel' });
-        serialInput.value = '';
-        saveToLocalStorage();
-      });
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  const sn = serialInput.value.trim();
+  const categoria = categorySelect.value;
+  const subcategoria = subcategorySelect.value;
 
-      addTechBtn.addEventListener('click', () => {
-        const n = techNameInput.value.trim();
-        if (!n || techs.includes(n)) return;
-        techs.push(n);
-        techNameInput.value = '';
-        renderTechInterface();
-        renderInstalledList(); // opcional
-        renderPickupList();    // opcional
-        saveToLocalStorage();
-      });
+  if (items.some(x => x.numeroSerie === sn)) return alert('Este número de série já está cadastrado no estoque.');
 
+  const item = {
+    categoria,
+    subcategoria,
+    numeroSerie: sn,
+    status: 'disponivel',
+    tecnico: null
+  };
+
+  items.push(item);
+  serialInput.value = '';
+  saveToLocalStorage();
+
+  try {
+    const { error } = await supabase.from('equipamentos').insert([item]);
+    if (error) throw error;
+    console.log('📡 Equipamento cadastrado na nuvem com sucesso.');
+  } catch (err) {
+    console.error('Erro ao salvar no Supabase:', err.message);
+    alert('⚠️ Erro ao salvar no banco. Verifique a conexão.');
+  }
+});
+
+addTechBtn.addEventListener('click', async () => {
+  const n = techNameInput.value.trim();
+  if (!n || techs.includes(n)) return;
+  techs.push(n);
+  techNameInput.value = '';
+  renderTechInterface();
+  renderInstalledList();
+  renderPickupList();
+
+  // ⬇️ Salva no Supabase
+  try {
+    const { error } = await supabase.from('tecnicos').upsert([{ nome: n }], { onConflict: 'nome' });
+    if (error) throw error;
+  } catch (err) {
+    alert('Erro ao salvar técnico no banco.');
+    console.error(err);
+  }
+});
       const openInstallBtn = document.getElementById('open-instalados');
   const openPickupBtn = document.getElementById('open-recolhas');
 
@@ -502,128 +563,166 @@ techs.forEach(tech => {
 
 
       // Assign with Enter key
-    assignSerial.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const tech = assignTech.value;
-      const sn = assignSerial.value.trim();
-      if (!tech || !sn) return;
+assignSerial.addEventListener('keydown', async e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const tech = assignTech.value;
+    const sn = assignSerial.value.trim();
+    if (!tech || !sn) return;
 
-      const item = items.find(i => i.numeroSerie === sn);
+    const item = items.find(i => i.numeroSerie === sn);
 
-      if (!item) {
-        alert('Este item não está no estoque.');
+    if (!item) {
+      alert('Este item não está no estoque.');
+      return;
+    }
+
+    if (item.tecnico && item.tecnico !== tech) {
+      const confirmar = confirm(`⚠️ O equipamento já está atribuído a ${item.tecnico}. Deseja transferi-lo para ${tech}?`);
+      if (!confirmar) {
+        assignSerial.value = '';
         return;
       }
-
-if (item.tecnico && item.tecnico !== tech) {
-  const confirmar = confirm(`⚠️ O equipamento já está atribuído a ${item.tecnico}. Deseja transferi-lo para ${tech}?`);
-  if (!confirmar) {
-    assignSerial.value = '';
-    return;
-  }
-}
-
-
-      item.tecnico = tech;
-
-      assignSerial.value = '';
-      renderTechInterface();
-      renderStock();
-      saveToLocalStorage();
     }
-  });
+
+    item.tecnico = tech;
+
+    // 🔥 Atualiza no Supabase
+    const { error } = await supabase
+      .from('equipamentos')
+      .update({ tecnico: tech })
+.eq('numero_serie', sn);
+
+    if (error) {
+      alert('Erro ao atualizar no banco de dados.');
+      console.error(error);
+    }
+
+    assignSerial.value = '';
+    renderTechInterface();
+    renderStock();
+  }
+});
 
 
       // Instalar Equipamento
-  installSerial.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const tech = installTech.value;
-      const sn = installSerial.value.trim();
-      if (!tech || !sn) return;  // Validação do técnico e número de série
+installSerial.addEventListener('keydown', async e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const tech = installTech.value;
+    const sn = installSerial.value.trim();
+    if (!tech || !sn) return;
 
-      const item = items.find(i => i.numeroSerie === sn);
-      if (!item) return alert('Este item não está no estoque.'); // Verifica se o item existe no estoque
+    const item = items.find(i => i.numeroSerie === sn);
+    if (!item) return alert('Este item não está no estoque.');
 
-      // Verifica se já está instalado ou recolhido
-      if (item.status === 'recolhido') {
-        return alert('Este equipamento já foi recolhido e não pode ser instalado.');
-      }
-      if (item.status === 'instalado') {
-        return alert('Este equipamento já foi instalado.');
-      }
-
-      item.status = 'instalado'; // Marca como instalado
-      item.tecnico = tech; // Atribui o técnico
-      installSerial.value = ''; // Limpa o campo
-      renderStock(); // Atualiza o estoque
-      renderTechInterface(); // Atualiza a interface dos técnicos
-      renderInstalledList(); // Atualiza a lista de instalados
-      saveToLocalStorage();
+    if (item.status === 'recolhido') {
+      return alert('Este equipamento já foi recolhido e não pode ser instalado.');
     }
-  });
+    if (item.status === 'instalado') {
+      return alert('Este equipamento já foi instalado.');
+    }
+
+    item.status = 'instalado';
+    item.tecnico = tech;
+
+    // 🔥 Atualiza no Supabase
+    const { error } = await supabase
+      .from('equipamentos')
+      .update({ status: 'instalado', tecnico: tech })
+      .eq('numero_serie', sn);
+
+    if (error) {
+      alert('Erro ao atualizar instalação no banco.');
+      console.error(error);
+    }
+
+    installSerial.value = '';
+    renderStock();
+    renderTechInterface();
+    renderInstalledList();
+  }
+});
 
 
 
       // Recolher Equipamento
-  pickupSerial.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const tech = pickupTech.value;
-      const sn = pickupSerial.value.trim();
-      const cat = document.getElementById('pickup-category').value || 'Recolha';
-      const sub = document.getElementById('pickup-subcategory').value || 'Desconhecido';
+pickupSerial.addEventListener('keydown', async e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const tech = pickupTech.value;
+    const sn = pickupSerial.value.trim();
+    const cat = document.getElementById('pickup-category').value || 'Recolha';
+    const sub = document.getElementById('pickup-subcategory').value || 'Desconhecido';
 
-      if (!tech || !sn) return;
+    if (!tech || !sn) return;
 
-      let item = items.find(i => i.numeroSerie === sn);
+    let item = items.find(i => i.numeroSerie === sn);
 
-      if (!item) {
-        item = {
-          numeroSerie: sn,
-          categoria: cat,
-          subcategoria: sub,
-          status: 'recolhido',
-          tecnico: tech
-        };
-        items.push(item);
-      } else {
-        if (item.status === 'instalado') {
-          return alert('Este equipamento já foi instalado e não pode ser recolhido.');
-        }
-        if (item.status === 'recolhido') {
-          return alert('Este equipamento já foi recolhido.');
-        }
-        item.status = 'recolhido';
-        item.tecnico = tech;
+    if (!item) {
+      item = {
+        numeroSerie: sn,
+        categoria: cat,
+        subcategoria: sub,
+        status: 'recolhido',
+        tecnico: tech
+      };
+      items.push(item);
+
+      // ⬇️ Inserção no banco se não existia
+      const { error } = await supabase
+        .from('equipamentos')
+        .insert([item]);
+
+      if (error) {
+        alert('Erro ao salvar recolha no banco.');
+        console.error(error);
+      }
+    } else {
+      if (item.status === 'instalado') {
+        return alert('Este equipamento já foi instalado e não pode ser recolhido.');
+      }
+      if (item.status === 'recolhido') {
+        return alert('Este equipamento já foi recolhido.');
       }
 
-      pickupSerial.value = '';
-      renderStock();
-      renderTechInterface();
-      renderPickupList();
+      item.status = 'recolhido';
+      item.tecnico = tech;
+
+      // ⬇️ Atualização no banco se já existia
+      const { error } = await supabase
+        .from('equipamentos')
+        .update({ status: 'recolhido', tecnico: tech })
+        .eq('numero_serie', sn);
+
+      if (error) {
+        alert('Erro ao atualizar recolha no banco.');
+        console.error(error);
+      }
     }
-  });
+
+    pickupSerial.value = '';
+    renderStock();
+    renderTechInterface();
+    renderPickupList();
+  }
+});
 // 💾 Funções para salvar/carregar localStorage
-function saveToLocalStorage() {
-  localStorage.setItem('matriz_items', JSON.stringify(items));
-  localStorage.setItem('matriz_techs', JSON.stringify(techs));
-}
 
-function loadFromLocalStorage() {
-  const savedItems = JSON.parse(localStorage.getItem('matriz_items') || '[]');
-  const savedTechs = JSON.parse(localStorage.getItem('matriz_techs') || '[]');
 
-  if (Array.isArray(savedItems)) items.push(...savedItems);
-  if (Array.isArray(savedTechs)) techs.push(...savedTechs);
-}
+
 
       // Init
-      loadFromLocalStorage();
-      populateCategories();
-      populatePickupCategories();
-      showView(null);
+(async function init() {
+  await carregarTecnicosDoSupabase();
+  await carregarDoSupabase();
+  populateCategories();
+  populatePickupCategories();
+  renderTechInterface();
+  showView(null);
+})();
+
+
 
   function renderInstalledList() {
     const container = document.getElementById('installed-list');
@@ -753,73 +852,63 @@ function loadFromLocalStorage() {
 
     console.log('📥 Linhas importadas:', rows.length);
 
-    rows.slice(1).forEach((row, i) => {
-  const numeroSerie = row[5]?.toString().trim().substring(1); // 🔧 ignora 1º caractere
-    const subcategoria = row[7]?.toString().trim();          // Subcategoria
-
-    if (!numeroSerie || !subcategoria) {
-      console.warn(`⚠️ Linha ${i + 2} ignorada — dados incompletos`);
-      return;
-    }
+(async () => {
+  for (const [i, row] of rows.slice(1).entries()) {
+    const numeroSerie = row[5]?.toString().trim().substring(1);
+    const subcategoria = row[7]?.toString().trim();
+    if (!numeroSerie || !subcategoria) continue;
 
     const temStatus = !!row[1];
     const nomeTecnicoBruto = row[4]?.toString().trim();
-
     let status = temStatus ? 'instalado' : 'disponivel';
-    let tecnico = '';
+    let tecnico = nomeTecnicoBruto ? nomeTecnicoBruto.split(' ')[0] : '';
 
-    if (temStatus && !nomeTecnicoBruto) {
-      tecnico = 'Tec. Indisponível';
-    } else if (nomeTecnicoBruto) {
-      tecnico = nomeTecnicoBruto.split(' ')[0]; // só o primeiro nome
-    }
-
-    // Detecta categoria automaticamente
+    // Detecta categoria
     const subcatNorm = subcategoria.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  let categoria = 'Outros';
-  if (subcatNorm.includes('box') || subcatNorm.includes('dta') || subcatNorm.includes('intek')) {
-    categoria = "Box's";
-  } else if (subcatNorm.includes('router')) {
-    categoria = "Router's";
-  } else if (subcatNorm.includes('extender')) {
-    categoria = "Extender's";
-  } else if (subcatNorm.includes('cartao') || subcatNorm.includes('sim')) {
-    categoria = "Cartão SIM";
-  } else if (subcatNorm.includes('ont')) {
-    categoria = "ONT'S";
-  } else if (subcatNorm.includes('telefone') || subcatNorm.includes('voip')) {
-    categoria = "Telefones";
-  }
+    let categoria = 'Outros';
+    if (subcatNorm.includes('box') || subcatNorm.includes('dta')) categoria = "Box's";
+    else if (subcatNorm.includes('router')) categoria = "Router's";
+    else if (subcatNorm.includes('extender')) categoria = "Extender's";
+    else if (subcatNorm.includes('cartao') || subcatNorm.includes('sim')) categoria = "Cartão SIM";
+    else if (subcatNorm.includes('ont')) categoria = "ONT'S";
+    else if (subcatNorm.includes('telefone') || subcatNorm.includes('voip')) categoria = "Telefones";
 
     if (!categories[categoria]) categories[categoria] = [];
     if (!categories[categoria].includes(subcategoria)) {
       categories[categoria].push(subcategoria);
     }
 
+    // Atualiza local (para interface funcionar)
     const existingItem = items.find(item => item.numeroSerie === numeroSerie);
-
-  if (existingItem) {
-    // Atualiza categoria e subcategoria, mas preserva técnico e status se já estiver "instalado" ou "recolhido"
-    existingItem.categoria = categoria;
-    existingItem.subcategoria = subcategoria;
-
-    if (existingItem.status === 'disponivel') {
-      existingItem.status = status;
-      if (tecnico) existingItem.tecnico = tecnico;
+    if (existingItem) {
+      existingItem.categoria = categoria;
+      existingItem.subcategoria = subcategoria;
+      if (existingItem.status === 'disponivel') {
+        existingItem.status = status;
+        existingItem.tecnico = tecnico;
+      }
+    } else {
+      items.push({ categoria, subcategoria, numeroSerie, status, tecnico });
     }
 
-    // Se já foi instalado/recolhido, não sobrescreve nada
-  } else {
-    items.push({
+    // Salva no Supabase 🧠
+    await supabase.from('equipamentos').upsert({
       categoria,
       subcategoria,
-      numeroSerie,
+      numero_serie: numeroSerie,
       status,
       tecnico
-    });
+    }, { onConflict: 'numero_serie' });
+
   }
 
-  });
+  // Atualiza UI
+  populateCategories();
+  updateSubcategories();
+  renderStock(searchInput.value.trim());
+  renderTechInterface();
+  alert('✅ Importação finalizada com sucesso!');
+})();
 
 
 
@@ -830,7 +919,6 @@ function loadFromLocalStorage() {
     renderStock(searchInput.value.trim());
     renderTechInterface();
     alert('✅ Importação finalizada com sucesso!');
-    saveToLocalStorage();
   };
 
 
@@ -841,8 +929,6 @@ function loadFromLocalStorage() {
   // 🧨 Reset total da aplicação (limpa memória e reinicia)
 document.getElementById('reset-app').addEventListener('click', () => {
   if (confirm('⚠️ Isso apagará todos os dados carregados/importados. Deseja continuar?')) {
-    localStorage.removeItem('matriz_items');
-    localStorage.removeItem('matriz_techs');
     location.reload();
   }
 });
